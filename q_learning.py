@@ -14,101 +14,66 @@ from environment import MountainCar
 
 Debug = True
 
-# finite difference approximation
-'''
-if Debug:
-    grad = np.zeros(self.W.shape[0])
-    for m in range(1, len(grad) + 1):
-        d = np.zeros(self.W.shape[0])
-        d[m] = 1
-        v = np.dot(self.x, self.W + epsilon * d) + self.b
-        v -= np.dot(self.x, self.W - epsilon * d) + self.b
-        v /= 2 * epsilon
-        grad[m] = v
-    
-    if np.linalg.norm(dW - grad) > diff_th:
-        print("Gradient compute error!")
-        print("dW: ", dW)
-        print("grad: ", grad)
-'''
+action_space = [0, 1, 2]
 
-class rl(object):
+class qlearning(object):
     def __init__(self, mode, epsilon, gamma, learning_rate):
         self.mode = mode
         self.epsilon = epsilon
         self.gamma = gamma
-        self.learning_rate = learning_rate
+        self.lr = learning_rate
 
-    # SGD_step: update params by taking one SGD step
-    # <x> a 1-D numpy array
-    # <y> an integer within [0, num_class - 1]
-    def SGD_step(self, x, y):
-        # perform forward propogation and compute intermediate results
-        for layer in self.layers:
-            x = layer.forward(x)
-        loss, _ = self.criterion.forward(x, y)
+        self.env = MountainCar(mode)
+        self.env.reset()
 
-        # perform back propagation and update parameters
-        delta = self.criterion.backward()
-        for layer in reversed(self.layers):
-            delta = layer.backward(delta, learning_rate)
-            
-        return loss
+        self.state = 0 # TODO: in "raw" or "tile" representation
+        self.s = 1
+        self.a = len(action_space)
+        self.W = np.zeros((self.s, self.a)) # TODO: dimention?
+        self.b = 0
+        self.q = np.zeros((self.s, self.a))
 
+    def linear_approx(self, state, action):
+        return np.dot(state.T, self.W) + self.b
 
-    def train(self, episodes, max_iterations):
-        with open(metrics_out, 'w') as f_metrics:
+    # choose an action based on epsilon-greedy method
+    def select_action(self):
+        if np.random.rand() < self.epsilon:
+            return np.random.randint(0, len(action_space) + 1)
+        else:
+            # In case of multiple maximum values, the indice of the first occurrence is returned.
+            return np.argmax(self.q[self.state])
+
+    def run(self, weight_out, returns_out, episodes, max_iterations):
+        with open(returns_out, 'w') as f_returns:
             # perform training
-            for epoch in range(episodes):
-                loss = 0
-                for idx in range(len(dataset)):
-                    loss = self.SGD_step(dataset[idx][1], dataset[idx][0])
-                    if Debug and (idx % 1000 == 0):
-                        print("[Epoch ", epoch + 1, "] Step ", idx + 1, ", current_loss: ", loss)
+            for episode in range(episodes):
+                rewards = 0
+                for i in range(max_iterations):
+                    # run step
+                    action = self.select_action()
+                    self.state, reward, done = self.env.step(action)
 
-                train_loss, train_error = self.evaluate(train_input, train_out)
-                test_loss, test_error = self.evaluate(test_input, test_out)
+                    # update parameters
+                    self.W = self.W - self.lr * (self.q - (reward + self.gamma * np.max()))
 
+                    if done:
+                        self.env.reset()
+                        continue
+
+                f_returns.write(str(rewards) + "\n")
                 if Debug:
-                    print("[Epoch ", epoch + 1, "] ", end='')
-                    print("train_loss: ", train_loss, end=' ')
-                    print("train_error: ", train_error)
-                    print("test_loss: ", test_loss, end=' ')
-                    print("test_error: ", test_error)
+                    print("[episode ", episode + 1, "] total rewards: ", rewards)
 
-                f_metrics.write("epoch=" + str(epoch) + " crossentryopy(train): " + str(train_loss) + "\n")
-                f_metrics.write("epoch=" + str(epoch) + " crossentryopy(test): " + str(test_loss) + "\n")
+        with open(weight_out, 'w') as f_weight:
+            f_weight.write(str(self.b) + "\n")
+            # write the values of weights in row major order
+            for i in range(self.W.shape[0]):
+                for j in range(self.W.shape[1]):
+                    f_weight.write(str(self.W[i][j]) + "\n")
 
-    # predict y given an array x
-    # not used
-    def predict(self, x):
-        for layer in self.layers:
-            x = layer.forward(x)
-        sm = np.exp(x) / np.sum(np.exp(x), axis=0)
-        return np.argmax(sm)
-
-    def evaluate(self, in_path, out_path, write = False):
-        total_loss, error, total = 0., 0., 0.
-
-        with open(in_path, 'r') as f_in:
-            with open(out_path, 'a') as f_out:
-                for line in f_in:
-                    split_line = line.strip().split(',')
-                    y = int(split_line[0])
-                    x = np.asarray(split_line[1:], dtype=int)
-
-                    for layer in self.layers:
-                        x = layer.forward(x)
-                    loss, pred = self.criterion.forward(x, y)
-
-                    total_loss += loss
-                    if pred != y:
-                        error += 1
-                    if write:
-                        f_out.write(str(pred) + "\n")
-                    total += 1
-
-        return total_loss / total, error / total
+        # visualization
+        self.env.render()
 
 
 if __name__ == '__main__':
@@ -126,11 +91,8 @@ if __name__ == '__main__':
     learning_rate = float(sys.argv[8]) # the learning rate α of the Q-learning algorithm
 
     # build and init 
-    model = rl(mode, epsilon, gamma, learning_rate)
+    model = qlearning(mode, epsilon, gamma, learning_rate)
 
-    # training
-    model.train(episodes, max_iterations)
-
-    # testing: evaluate and write labels to output files
-    model.evaluate(weight_out, returns_out, True)
+    # run and train the agent
+    model.run(weight_out, returns_out, episodes, max_iterations)
 
