@@ -14,35 +14,39 @@ from environment import MountainCar
 
 Debug = True
 
-action_space = [0, 1, 2]
-
 class qlearning(object):
     def __init__(self, mode, epsilon, gamma, learning_rate):
-        self.mode = mode
         self.epsilon = epsilon
         self.gamma = gamma
         self.lr = learning_rate
-
+        self.mode = mode
+        if self.mode == "raw":
+            self.state_space = 2
+        elif self.mode == "tile":
+            self.state_space = 2048
+        else:
+            print("Error mode.")
+        self.action_space = 3
         self.env = MountainCar(mode)
-        self.env.reset()
 
-        self.state = 0 # TODO: in "raw" or "tile" representation
-        self.s = 1
-        self.a = len(action_space)
-        self.W = np.zeros((self.s, self.a)) # TODO: dimention?
+        self.state = np.zeros((self.state_space))
+        self.q = np.zeros((self.action_space))
+        self.W = np.zeros((self.state_space, self.action_space))
         self.b = 0
-        self.q = np.zeros((self.s, self.a))
 
-    def linear_approx(self, state, action):
-        return np.dot(state.T, self.W) + self.b
+    # given the current state and action, approximate thee action value
+    def linear_approx(self, state):
+        return np.dot(state.T, self.W).T + self.b
 
     # choose an action based on epsilon-greedy method
     def select_action(self):
         if np.random.rand() < self.epsilon:
-            return np.random.randint(0, len(action_space) + 1)
+            # selects uniformly at random from one of the 3 actions (0, 1, 2) with probability ε
+            return np.random.randint(0, self.action_space + 1)
         else:
-            # In case of multiple maximum values, the indice of the first occurrence is returned.
-            return np.argmax(self.q[self.state])
+            # selects the optimal action with probability 1 − ε
+            # In case of multiple maximum values, return the first one
+            return np.argmax(self.linear_approx(self.state))
 
     def run(self, weight_out, returns_out, episodes, max_iterations):
         with open(returns_out, 'w') as f_returns:
@@ -50,12 +54,19 @@ class qlearning(object):
             for episode in range(episodes):
                 rewards = 0
                 for i in range(max_iterations):
-                    # run step
+                    # call step
                     action = self.select_action()
                     self.state, reward, done = self.env.step(action)
 
                     # update parameters
-                    self.W = self.W - self.lr * (self.q - (reward + self.gamma * np.max()))
+                    if self.mode == "raw":
+                        delta = self.state
+                        self.W = self.W - self.lr * (self.q - (reward + self.gamma * np.max(self.linear_approx(self.state)))) * delta
+                    elif self.mode == "tile":
+                        # TODO:
+                        pass
+                    else:
+                        print("Error mode.")
 
                     if done:
                         self.env.reset()
