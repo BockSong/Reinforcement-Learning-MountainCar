@@ -29,7 +29,7 @@ class qlearning(object):
         self.action_space = 3
         self.env = MountainCar(mode)
 
-        self.state = np.zeros((self.state_space))
+        #self.state = np.zeros((self.state_space))
         self.q = np.zeros((self.action_space))
         self.W = np.zeros((self.state_space, self.action_space))
         self.b = 0
@@ -39,37 +39,43 @@ class qlearning(object):
         return np.dot(state.T, self.W).T + self.b
 
     # choose an action based on epsilon-greedy method
-    def select_action(self):
+    def select_action(self, state):
         if np.random.rand() < self.epsilon:
             # selects uniformly at random from one of the 3 actions (0, 1, 2) with probability ε
-            return np.random.randint(0, self.action_space + 1)
+            return np.random.randint(0, self.action_space)
         else:
             # selects the optimal action with probability 1 − ε
             # In case of multiple maximum values, return the first one
-            return np.argmax(self.linear_approx(self.state))
+            return np.argmax(self.linear_approx(state))
 
     def run(self, weight_out, returns_out, episodes, max_iterations):
         with open(returns_out, 'w') as f_returns:
             # perform training
             for episode in range(episodes):
                 rewards = 0
+                state = self.env.reset()
+                state = np.fromiter(state.values(), dtype=float)
+                if Debug:
+                    print("episode " + str(episode) + " init state: ", end = "")
+                    print(state)
                 for i in range(max_iterations):
                     # call step
-                    action = self.select_action()
-                    self.state, reward, done = self.env.step(action)
+                    action = self.select_action(state)
+                    next_state, reward, done = self.env.step(action)
+                    next_state = np.fromiter(next_state.values(), dtype=float)
 
+                    if Debug:
+                        print("episode " + str(episode) + " iter " + str(i) + ", action: " + str(action) + " next state: ", end = "")
+                        print(next_state)
                     # update parameters
-                    if self.mode == "raw":
-                        delta = self.state
-                        self.W = self.W - self.lr * (self.q - (reward + self.gamma * np.max(self.linear_approx(self.state)))) * delta
-                    elif self.mode == "tile":
-                        # TODO:
-                        pass
-                    else:
-                        print("Error mode.")
+                    delta = state
+                    self.W[:, action] = self.W[:, action] - self.lr * (self.linear_approx(state)[action] - 
+                                      (reward + self.gamma * np.max(self.linear_approx(next_state)))) * delta
+                    self.b = self.b - self.lr * (self.linear_approx(state)[action] - 
+                                      (reward + self.gamma * np.max(self.linear_approx(next_state))))
 
+                    state = next_state
                     if done:
-                        self.env.reset()
                         continue
 
                 f_returns.write(str(rewards) + "\n")
@@ -86,6 +92,9 @@ class qlearning(object):
         # visualization
         self.env.render()
 
+    def close(self):
+        self.env.close()
+
 
 if __name__ == '__main__':
     if len(sys.argv) != 9:
@@ -97,13 +106,15 @@ if __name__ == '__main__':
     returns_out = sys.argv[3] # path to output the returns of the agent
     episodes = int(sys.argv[4]) # the number of episodes your program should train the agent for
     max_iterations = int(sys.argv[5]) # the maximum of the length of an episode. (Terminate the current episode when it's reached)
-    epsilon = int(sys.argv[6]) # the value ε for the epsilon-greedy strategy
-    gamma = int(sys.argv[7]) # the discount factor γ.
+    epsilon = float(sys.argv[6]) # the value ε for the epsilon-greedy strategy
+    gamma = float(sys.argv[7]) # the discount factor γ.
     learning_rate = float(sys.argv[8]) # the learning rate α of the Q-learning algorithm
 
     # build and init 
     model = qlearning(mode, epsilon, gamma, learning_rate)
 
-    # run and train the agent
+    # train the agent
     model.run(weight_out, returns_out, episodes, max_iterations)
+
+    model.close()
 
