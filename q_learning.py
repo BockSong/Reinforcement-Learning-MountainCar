@@ -20,21 +20,14 @@ class qlearning(object):
         self.gamma = gamma
         self.lr = learning_rate
         self.mode = mode
-        if self.mode == "raw":
-            self.state_space = 2
-        elif self.mode == "tile":
-            self.state_space = 2048
-        else:
-            print("Error mode.")
-        self.action_space = 3
         self.env = MountainCar(mode)
+        self.state_space = self.env.state_space
+        self.action_space = 3
 
-        #self.state = np.zeros((self.state_space))
-        self.q = np.zeros((self.action_space))
         self.W = np.zeros((self.state_space, self.action_space))
         self.b = 0
 
-    # given the current state and action, approximate thee action value
+    # given the current state and action, approximate thee action value (q_s)
     def linear_approx(self, state):
         return np.dot(state.T, self.W).T + self.b
 
@@ -48,13 +41,24 @@ class qlearning(object):
             # In case of multiple maximum values, return the first one
             return np.argmax(self.linear_approx(state))
 
+    def transfer_state(self, state):
+        if self.mode == "raw":
+            return np.fromiter(state.values(), dtype=float)
+        elif self.mode == "tile":
+            idx = sorted(state.keys())
+            trans_state = np.zeros((self.state_space))
+            trans_state[idx] = 1
+            return trans_state
+        else:
+            print("Error mode.")
+            return
+
     def run(self, weight_out, returns_out, episodes, max_iterations):
         with open(returns_out, 'w') as f_returns:
             # perform training
             for episode in range(episodes):
                 rewards = 0
-                state = self.env.reset()
-                state = np.fromiter(state.values(), dtype=float)
+                state = self.transfer_state(self.env.reset())
                 if Debug:
                     print("episode " + str(episode) + " init state: ", end = "")
                     print(state)
@@ -62,21 +66,25 @@ class qlearning(object):
                     # call step
                     action = self.select_action(state)
                     next_state, reward, done = self.env.step(action)
-                    next_state = np.fromiter(next_state.values(), dtype=float)
+                    next_state = self.transfer_state(next_state)
 
                     if Debug:
-                        print("episode " + str(episode) + " iter " + str(i) + ", action: " + str(action) + " next state: ", end = "")
+                        print("episode " + str(episode) + " iter " + str(i) + ", action: " + str(action)
+                                                                            + " next state: ", end = "")
                         print(next_state)
-                    # update parameters
+
+                    # update w_a
                     delta = state
                     self.W[:, action] = self.W[:, action] - self.lr * (self.linear_approx(state)[action] - 
                                       (reward + self.gamma * np.max(self.linear_approx(next_state)))) * delta
+                    # update bias
                     self.b = self.b - self.lr * (self.linear_approx(state)[action] - 
                                       (reward + self.gamma * np.max(self.linear_approx(next_state))))
 
                     state = next_state
+                    rewards += reward
                     if done:
-                        continue
+                        break
 
                 f_returns.write(str(rewards) + "\n")
                 if Debug:
@@ -90,7 +98,7 @@ class qlearning(object):
                     f_weight.write(str(self.W[i][j]) + "\n")
 
         # visualization
-        self.env.render()
+        # self.env.render()
 
     def close(self):
         self.env.close()
@@ -105,7 +113,7 @@ if __name__ == '__main__':
     weight_out = sys.argv[2] # path to output the weights of the linear model
     returns_out = sys.argv[3] # path to output the returns of the agent
     episodes = int(sys.argv[4]) # the number of episodes your program should train the agent for
-    max_iterations = int(sys.argv[5]) # the maximum of the length of an episode. (Terminate the current episode when it's reached)
+    max_iterations = int(sys.argv[5]) # the maximum of the length of an episode
     epsilon = float(sys.argv[6]) # the value ε for the epsilon-greedy strategy
     gamma = float(sys.argv[7]) # the discount factor γ.
     learning_rate = float(sys.argv[8]) # the learning rate α of the Q-learning algorithm
@@ -116,5 +124,4 @@ if __name__ == '__main__':
     # train the agent
     model.run(weight_out, returns_out, episodes, max_iterations)
 
-    model.close()
-
+    #model.close()
