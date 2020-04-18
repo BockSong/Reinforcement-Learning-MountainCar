@@ -29,7 +29,8 @@ class qlearning(object):
 
     # given the current state and action, approximate thee action value (q_s)
     def linear_approx(self, state):
-        return np.dot(state.T, self.W).T + self.b
+        #return np.dot(state.T, self.W).T + self.b
+        return state.dot(self.W) + self.b
 
     # choose an action based on epsilon-greedy method
     def select_action(self, state):
@@ -68,18 +69,20 @@ class qlearning(object):
                     next_state, reward, done = self.env.step(action)
                     next_state = self.transfer_state(next_state)
 
-                    if Debug:
+                    if Debug and i % 100 == 0:
                         print("episode " + str(episode) + " iter " + str(i) + ", action: " + str(action)
                                                                             + " next state: ", end = "")
                         print(next_state)
 
                     # update w_a
                     delta = state
-                    self.W[:, action] = self.W[:, action] - self.lr * (self.linear_approx(state)[action] - 
-                                      (reward + self.gamma * np.max(self.linear_approx(next_state)))) * delta
+                    cur_q = self.linear_approx(state)
+                    next_q = self.linear_approx(next_state)
+                    self.W[:, action] = self.W[:, action] - self.lr * (cur_q[action] - 
+                                      (reward + self.gamma * np.max(next_q))) * delta
                     # update bias
-                    self.b = self.b - self.lr * (self.linear_approx(state)[action] - 
-                                      (reward + self.gamma * np.max(self.linear_approx(next_state))))
+                    self.b = self.b - self.lr * (cur_q[action] - 
+                                      (reward + self.gamma * np.max(next_q)))
 
                     state = next_state
                     rewards += reward
